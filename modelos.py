@@ -6,23 +6,27 @@
 #
 # Este módulo asume que existe `preprocesamiento.preprocesar(text)` que devuelve
 # una lista de tokens para un texto dado.
-#"""
+# """
 
 # Importa el módulo local que contiene la función `preprocesar`.
 import preprocesamiento
+
 # Contador de frecuencias para BM25.
 from collections import Counter
+
 # Funciones matemáticas para logaritmos y otras operaciones.
 import math
+
 # Importa el vectorizador TF-IDF de scikit-learn.
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 # Importa la función para calcular similitud coseno entre vectores.
 from sklearn.metrics.pairwise import cosine_similarity
 
 
 # ---------------------------------------------------------------------------
 # Recuperación basada en similitud Jaccard (vectores binarios)
-# --------------------------------------------------------------------------- 
+# ---------------------------------------------------------------------------
 def calcular_jaccard(query_tokens, doc_tokens):
     """Calcula la similitud de Jaccard entre dos listas de tokens.
 
@@ -45,7 +49,7 @@ def calcular_jaccard(query_tokens, doc_tokens):
     # Calcular la intersección: elementos que aparecen en ambos conjuntos
     interseccion = len(set_q & set_d)  # elementos comunes
     # Calcular la unión: elementos que aparecen en al menos uno
-    union = len(set_q | set_d)         # elementos totales distintos
+    union = len(set_q | set_d)  # elementos totales distintos
 
     # Si la unión es 0 (ambos conjuntos vacíos) evitamos división por cero
     if union == 0:
@@ -96,7 +100,7 @@ def recuperar_jaccard(query, corpus_procesado):
 def recuperar_tfidf(query, corpus_procesado):
     """Recupera documentos usando TF-IDF y similitud de coseno.
 
-    Flujo resumido:
+    Flujo :
     1. Convertir cada documento tokenizado a un string (" ".join(tokens)).
     2. Crear un `TfidfVectorizer` y hacer `fit_transform` sobre el corpus
        para obtener la matriz TF-IDF de los documentos.
@@ -113,28 +117,32 @@ def recuperar_tfidf(query, corpus_procesado):
         list[tuple[int, float]]: lista de tuplas (doc_id, score) ordenada
             por score descendente. Solo se incluyen documentos con score>0.
     """
-    # Convertir cada documento (lista de tokens) a un string separado por espacios
+    # 1. Adaptar nuestro corpus al formato que exige sklearn (lista de strings)
+    # Unimos los tokens de cada documento con un espaci
     corpus_strings = [" ".join(doc) for doc in corpus_procesado]
 
-    # Crear el vectorizador TF-IDF con parámetros por defecto
+    # 2. Inicializar el vectorizador TF-IDF
     vectorizador = TfidfVectorizer()
 
-    # Ajustar el vectorizador al corpus y transformar el corpus en matriz TF-IDF
+    # 3. Ajustar el modelo (aprender el vocabulario e IDF) y transformar el corpus en una matriz
     tfidf_matriz = vectorizador.fit_transform(corpus_strings)
 
-    # Preprocesar la consulta y convertirla a string para vectorizarla
+    # 4. Preprocesar la consulta y convertirla a string para vectorizarla
     query_tokens = preprocesamiento.preprocesar(query)
     query_string = " ".join(query_tokens)
 
-    # Transformar la consulta a vector TF-IDF usando el vocabulario aprendido
+    # 5. Vectorizar la consulta
+    # Usamos transform() en lugar de fit_transform() para usar el vocabulario ya aprendido
     query_vector = vectorizador.transform([query_string])
 
-    # Calcular la similitud coseno entre la consulta y cada documento
+    # 6. Calcular la similitud del coseno entre la consulta y todos los documentos
+    # flatten() convierte la matriz de resultados en un arreglo unidimensional simple
     similitudes = cosine_similarity(query_vector, tfidf_matriz).flatten()
 
-    # Construir la lista de resultados (doc_id, score) filtrando ceros
+    # 7. Crear el ranking final estructurado como (doc_id, score)
     resultados = []
     for doc_id, score in enumerate(similitudes):
+        # Filtramos para no mostrar documentos con 0% de similitud
         if score > 0:
             resultados.append((doc_id, float(score)))
 
@@ -147,87 +155,58 @@ def recuperar_tfidf(query, corpus_procesado):
 # ---------------------------------------------------------------------------
 # Recuperación basada en BM25
 # ---------------------------------------------------------------------------
-def _calcular_idf_bm25(df, n_documentos):
-    """Calcula el IDF con corrección de 0.5 usado en BM25."""
+def calcular_idf_bm25(df, n_documentos):
+    """Calcula el IDF con la suavización estándar de BM25."""
     valor = math.log((n_documentos - df + 0.5) / (df + 0.5))
     return max(0.0, valor)
 
 
-def recuperar_bm25(query, corpus_procesado, k1=1.5, b=0.75, k3=None):
-    """Recupera documentos usando el modelo Okapi BM25.
-
-    Args:
-        query (str): texto de la consulta.
-        corpus_procesado (list[list[str]]): corpus tokenizado.
-        k1 (float): controla la saturación de la frecuencia del término.
-        b (float): controla la normalización por longitud del documento.
-        k3 (float | None): si se indica, añade el factor de frecuencia en la consulta.
-
-    Returns:
-        list[tuple[int, float]]: lista de tuplas (doc_id, score) ordenada de mayor a menor.
+def recuperar_bm25(query_texto, corpus_procesado, indice_invertido, k1=1.5, b=0.75):
     """
-    query_tokens = preprocesamiento.preprocesar(query)
+    Recupera documentos usando el modelo BM25.
+    """
+    # 1. Preprocesar la consulta
+    query_tokens = preprocesamiento.preprocesar(query_texto)
 
-    if not corpus_procesado:
+    # Si la consulta está vacía tras el preprocesamiento, no hay resultados
+    if not query_tokens:
         return []
 
+    # 2. Precalcular estadísticas globales del corpus
     n_documentos = len(corpus_procesado)
-    longitudes = [len(doc) for doc in corpus_procesado]
-    avgdl = sum(longitudes) / n_documentos
-
-    # Frecuencia documental: cuántos documentos contienen cada término.
-    df_por_termino = Counter()
-    for doc_tokens in corpus_procesado:
-        df_por_termino.update(set(doc_tokens))
-
-    tf_query = Counter(query_tokens)
-    terminos_query = tf_query.keys() if k3 is not None else set(query_tokens)
+    avgdl = sum(len(doc) for doc in corpus_procesado) / n_documentos
 
     resultados = []
 
+    # 3. Iterar sobre los documentos para calcular su score
     for doc_id, doc_tokens in enumerate(corpus_procesado):
-        tf_documento = Counter(doc_tokens)
-        dl = len(doc_tokens)
-        normalizador = k1 * ((1 - b) + b * (dl / avgdl))
         score = 0.0
+        dl = len(doc_tokens)  # Longitud del documento actual
 
-        for termino in terminos_query:
-            tf_td = tf_documento.get(termino, 0)
-            if tf_td == 0:
-                continue
+        # Evaluamos solo los términos únicos de la consulta
+        for termino in set(query_tokens):
 
-            df = df_por_termino.get(termino, 0)
-            if df == 0:
-                continue
+            # Si el término existe en nuestro índice y aparece en este documento
+            if termino in indice_invertido and doc_id in indice_invertido[termino]:
+                # Obtenemos TF y DF del indice invertido
+                tf = indice_invertido[termino][doc_id]
+                df = len(indice_invertido[termino])
 
-            idf = _calcular_idf_bm25(df, n_documentos)
-            tf_documento_factor = ((k1 + 1) * tf_td) / (normalizador + tf_td)
+                # Calculamos IDF
+                idf = calcular_idf_bm25(df, n_documentos)
 
-            if k3 is not None:
-                tf_tq = tf_query[termino]
-                tf_query_factor = ((k3 + 1) * tf_tq) / (k3 + tf_tq)
-            else:
-                tf_query_factor = 1.0
+                # Calculamos el peso BM25 para este término
+                numerador = tf * (k1 + 1)
+                denominador = tf + k1 * (1 - b + b * (dl / avgdl))
 
-            score += idf * tf_documento_factor * tf_query_factor
+                # Sumamos al score total del documento
+                score += idf * (numerador / denominador)
 
+        # Si el documento tiene alguna coincidencia, lo guardamos
         if score > 0:
             resultados.append((doc_id, float(score)))
 
+    # 4. Ordenar el ranking de mayor a menor relevancia
     resultados.sort(key=lambda x: x[1], reverse=True)
 
     return resultados
-
-
-# Interpretación de los scores BM25:
-# - Los scores son valores reales >= 0; valores más altos indican mayor relevancia
-#   relativa entre documentos para la misma consulta.
-# - No son probabilidades: no suman 1 ni tienen un umbral universal.
-# - Use los scores para ordenar y comparar (ranking). Por ejemplo, los
-#   documentos con los 5-10 scores más altos suelen ser los más relevantes.
-# - La magnitud absoluta depende del corpus (tamaño, vocabulario, longitudes):
-#   comparar scores entre distintas colecciones no es directo.
-# - Si necesita un valor interpretativo estable, normalice los scores o conviértalos
-#   en rangos (e.g., min-max o escala logarítmica) antes de aplicar umbrales.
-# - Para evaluación manual, inspeccione siempre los `top-k` (p. ej. top-10)
-#   en lugar de basarse en un único umbral fijo.
