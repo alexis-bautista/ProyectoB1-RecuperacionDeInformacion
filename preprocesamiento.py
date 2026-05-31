@@ -15,18 +15,24 @@ from nltk.stem import PorterStemmer
   
 # Funcion para cargar el corpus
 # Inicio de la sección modificada (2026-05-27 19:52:46): funciones de carga y preprocesamiento
-def cargar_corpus(path="corpus"):
+def cargar_corpus(path="corpus", archivos=None):
     """Carga todos los textos del directorio `path` desde archivos CSV.
 
     Args:
         path (str): carpeta donde están los CSV del corpus (por defecto 'corpus').
+        archivos (list[str] | None): lista opcional de nombres de archivos CSV a cargar.
 
     Returns:
         list[str]: lista con todos los textos extraídos de la columna 'text' de
             cada CSV.
     """
-    # Buscar únicamente los archivos que terminan en .csv dentro de `path`
-    archivos = [f for f in os.listdir(path) if f.endswith(".csv")]
+    # Buscar solo los archivos solicitados; si no se especifican, usar todos los CSV.
+    if archivos is None:
+        archivos = [f for f in os.listdir(path) if f.endswith(".csv")]
+    else:
+        archivos = [f for f in archivos if f.endswith(".csv")]
+
+    archivos = sorted(archivos)
     # Mensaje informativo con el número de archivos encontrados
     print(f"Se encontraron {len(archivos)} archivos CSV en el directorio.")
 

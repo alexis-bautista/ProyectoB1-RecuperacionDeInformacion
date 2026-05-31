@@ -4,12 +4,16 @@ import faiss
 from sentence_transformers import SentenceTransformer
 
 
-def construir_indice_faiss(corpus_original, nombre_modelo="all-MiniLM-L6-v2"):
+def construir_indice_faiss(corpus_original, nombre_modelo="all-MiniLM-L6-v2", modelo_existente=None):
     """
     Genera embeddings para el corpus y construye la base de datos vectorial con FAISS.
     """
-    print(f"Cargando el modelo preentrenado '{nombre_modelo}'...")
-    modelo = SentenceTransformer(nombre_modelo)
+    if modelo_existente is None:
+        print(f"Cargando el modelo preentrenado '{nombre_modelo}'...")
+        modelo = SentenceTransformer(nombre_modelo)
+    else:
+        modelo = modelo_existente
+        print("Reutilizando el modelo preentrenado ya cargado...")
 
     print(f"Generando embeddings para {len(corpus_original)} documentos...")
     print("(Esto puede tomar unos minutos dependiendo del procesador)")
