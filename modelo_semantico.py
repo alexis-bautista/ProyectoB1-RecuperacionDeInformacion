@@ -2,37 +2,77 @@
 import numpy as np
 import faiss
 from sentence_transformers import SentenceTransformer
+import os
+
+# def construir_indice_faiss(corpus_original, nombre_modelo="all-MiniLM-L6-v2", modelo_existente=None):
+#     """
+#     Genera embeddings para el corpus y construye la base de datos vectorial con FAISS.
+#     """
+#     if modelo_existente is None:
+#         print(f"Cargando el modelo preentrenado '{nombre_modelo}'...")
+#         modelo = SentenceTransformer(nombre_modelo)
+#     else:
+#         modelo = modelo_existente
+#         print("Reutilizando el modelo preentrenado ya cargado...")
+
+#     print(f"Generando embeddings para {len(corpus_original)} documentos...")
+#     print("(Esto puede tomar unos minutos dependiendo del procesador)")
+
+#     # 1. Generar embeddings: encode() devuelve tensores con la representación semántica
+#     embeddings = modelo.encode(corpus_original, show_progress_bar=True)
+
+#     # FAISS exige que la matriz de vectores sea estrictamente de tipo float32
+#     embeddings = np.array(embeddings).astype("float32")
+#     dimension_vector = embeddings.shape[1]  # Para este modelo será de 384 dimensiones
+
+#     print(f"Construyendo el índice FAISS (Dimensión: {dimension_vector})...")
+#     # 2. Crear el índice basado en la distancia L2 (Euclidiana)
+#     indice_faiss = faiss.IndexFlatL2(dimension_vector)
+
+#     # 3. Almacenar los embeddings en la base de datos vectorial
+#     indice_faiss.add(embeddings)
+
+#     print(f"Índice FAISS completado con {indice_faiss.ntotal} vectores.")
+
+#     return modelo, indice_faiss
 
 
-def construir_indice_faiss(corpus_original, nombre_modelo="all-MiniLM-L6-v2", modelo_existente=None):
+def construir_indice_faiss(
+    corpus_original, nombre_modelo="all-MiniLM-L6-v2", ruta_indice="indice_corpus.bin"
+):
     """
-    Genera embeddings para el corpus y construye la base de datos vectorial con FAISS.
+    Genera embeddings para el corpus o los carga desde el disco si ya existen.
     """
-    if modelo_existente is None:
-        print(f"Cargando el modelo preentrenado '{nombre_modelo}'...")
-        modelo = SentenceTransformer(nombre_modelo)
-    else:
-        modelo = modelo_existente
-        print("Reutilizando el modelo preentrenado ya cargado...")
+    print(f"Cargando el modelo preentrenado '{nombre_modelo}'...")
+    modelo = SentenceTransformer(nombre_modelo)
 
-    print(f"Generando embeddings para {len(corpus_original)} documentos...")
-    print("(Esto puede tomar unos minutos dependiendo del procesador)")
+    # 1. Verificar si ya hicimos este trabajo antes
+    if os.path.exists(ruta_indice):
+        print(f"¡Índice encontrado en el disco! Cargando desde '{ruta_indice}'...")
+        indice_faiss = faiss.read_index(ruta_indice)
+        print(f"Índice FAISS cargado al instante con {indice_faiss.ntotal} vectores.")
+        return modelo, indice_faiss
 
-    # 1. Generar embeddings: encode() devuelve tensores con la representación semántica
+    # 2. Si no existe
+    print(
+        f"No se encontró índice guardado. Generando embeddings para {len(corpus_original)} documentos..."
+    )
+    print("(Esto tomará varios minutos.)")
+
     embeddings = modelo.encode(corpus_original, show_progress_bar=True)
-
-    # FAISS exige que la matriz de vectores sea estrictamente de tipo float32
     embeddings = np.array(embeddings).astype("float32")
-    dimension_vector = embeddings.shape[1]  # Para este modelo será de 384 dimensiones
 
-    print(f"Construyendo el índice FAISS (Dimensión: {dimension_vector})...")
-    # 2. Crear el índice basado en la distancia L2 (Euclidiana)
+    dimension_vector = embeddings.shape[1]
+
+    print("Construyendo el índice FAISS...")
     indice_faiss = faiss.IndexFlatL2(dimension_vector)
-
-    # 3. Almacenar los embeddings en la base de datos vectorial
     indice_faiss.add(embeddings)
 
-    print(f"Índice FAISS completado con {indice_faiss.ntotal} vectores.")
+    # 3. Guardar el trabajo para el futuro
+    print(f"Guardando el índice en el disco como '{ruta_indice}'...")
+    faiss.write_index(indice_faiss, ruta_indice)
+
+    print(f"Proceso completado. Índice listo con {indice_faiss.ntotal} vectores.")
 
     return modelo, indice_faiss
 

@@ -4,15 +4,18 @@ import os
 
 # NLTK para recursos de procesamiento del lenguaje (stopwords, stemming)
 import nltk
+
 # pandas para leer los archivos CSV que contienen el corpus
 import pandas as pd
+
 # re para expresiones regulares (limpieza de caracteres)
 import re
+
 # stopwords y PorterStemmer para eliminar palabras vacías y aplicar stemming
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 
-  
+
 # Funcion para cargar el corpus
 # Inicio de la sección modificada (2026-05-27 19:52:46): funciones de carga y preprocesamiento
 def cargar_corpus(path="corpus", archivos=None):
@@ -28,9 +31,9 @@ def cargar_corpus(path="corpus", archivos=None):
     """
     # Buscar solo los archivos solicitados; si no se especifican, usar todos los CSV.
     if archivos is None:
-        archivos = [f for f in os.listdir(path) if f.endswith(".csv")]
+        archivos = sorted([f for f in os.listdir(path) if f.endswith(".csv")])
     else:
-        archivos = [f for f in archivos if f.endswith(".csv")]
+        archivos = sorted([f for f in os.listdir(path) if f.endswith(".csv")])
 
     archivos = sorted(archivos)
     # Mensaje informativo con el número de archivos encontrados
@@ -59,8 +62,7 @@ def cargar_corpus(path="corpus", archivos=None):
 
 
 # Función para preprocesamiento.
-# Descargar stopwords de NLTK si no están presentes. Esto realiza una descarga
-# la primera vez que se ejecuta; puede omitirse si ya las tienes instaladas.
+# Descargar stopwords de NLTK si no están presentes
 nltk.download("stopwords")  # Necesario la primera vez (descarga BD de NLTK)
 
 
